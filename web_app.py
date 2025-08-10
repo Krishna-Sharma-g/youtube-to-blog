@@ -196,6 +196,67 @@ def main():
             if st.button(f"Test Video {i}", key=f"test_{i}"):
                 st.session_state.url_input = test_url
                 st.experimental_rerun()
+                # Add this test function to your web_app.py
+async def test_openai_connection():
+    """Test OpenAI API connectivity."""
+    try:
+        import aiohttp
+        import json
+        
+        # Get API key
+        try:
+            api_key = st.secrets["OPENAI_API_KEY"]
+        except:
+            return False, "OpenAI API key not found in secrets"
+        
+        if not api_key.startswith("sk-"):
+            return False, "Invalid API key format"
+        
+        # Test API call
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "model": "gpt-3.5-turbo",
+            "messages": [{"role": "user", "content": "Say 'test successful'"}],
+            "max_tokens": 10
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=data,
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return True, "OpenAI API working"
+                else:
+                    error_text = await response.text()
+                    return False, f"API Error {response.status}: {error_text}"
+                    
+    except Exception as e:
+        return False, f"Connection error: {str(e)}"
+
+# Add this to your main() function before processing
+def main():
+    # ... existing code ...
+    
+    # Test OpenAI connection
+    if st.button("🧪 Test OpenAI Connection"):
+        with st.spinner("Testing OpenAI API..."):
+            try:
+                is_working, message = asyncio.run(test_openai_connection())
+                if is_working:
+                    st.success(f"✅ {message}")
+                else:
+                    st.error(f"❌ {message}")
+            except Exception as e:
+                st.error(f"❌ Test failed: {e}")
+
 
 # ✅ CORRECT: Entry point that calls main function
 if __name__ == "__main__":
