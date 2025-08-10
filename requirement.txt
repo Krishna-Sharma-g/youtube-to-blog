@@ -1,0 +1,7 @@
+openai>=1.14.0
+python-dotenv>=1.0
+youtube-transcript-api>=0.6
+pytube>=15.0
+aiohttp>=3.9
+yt-dlp>=2024.5        # faster & more reliable than pytube
+tqdm>=4.66            # nice download progress bar
