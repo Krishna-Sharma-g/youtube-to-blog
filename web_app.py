@@ -221,3 +221,16 @@ def main():
 
 if __name__ == "__main__":
     main()
+# Add this to your web_app.py for testing
+TEST_VIDEOS = [
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",  # Rick Astley (has captions)
+    "https://www.youtube.com/watch?v=8S0FDjFBj8o",  # TED Talk (clear speech)
+    "https://www.youtube.com/watch?v=ZmAzIqRSYIM",  # Educational content
+]
+
+# Add test buttons in sidebar
+with st.sidebar:
+    st.markdown("## 🧪 Test Videos")
+    for i, test_url in enumerate(TEST_VIDEOS, 1):
+        if st.button(f"Test Video {i}"):
+            st.session_state.url_input = test_url
