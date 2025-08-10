@@ -1,19 +1,19 @@
 from __future__ import annotations
-import asyncio
-import aiohttp
+import requests
 import json
 from typing import List, Dict
 import streamlit as st
 import os
+import time
 
 class BaseWorker:
-    """Base worker with robust OpenAI integration."""
+    """Base worker using requests instead of aiohttp."""
     
     def __init__(self, name: str):
         self.name = name
     
-    async def _call_openai(self, messages: List[Dict], max_tokens: int = 1000) -> str:
-        """Direct OpenAI API call with comprehensive error handling."""
+    def _call_openai_sync(self, messages: List[Dict], max_tokens: int = 1000) -> str:
+        """Synchronous OpenAI API call using requests."""
         try:
             # Get API key
             api_key = None
@@ -37,22 +37,20 @@ class BaseWorker:
                 "temperature": 0.7
             }
             
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers=headers,
-                    json=data,
-                    timeout=aiohttp.ClientTimeout(total=60)
-                ) as response:
-                    
-                    if response.status == 200:
-                        result = await response.json()
-                        content = result["choices"][0]["message"]["content"]
-                        return content.strip()
-                    else:
-                        error_text = await response.text()
-                        raise Exception(f"OpenAI API Error {response.status}: {error_text}")
-                        
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=data,
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                content = result["choices"][0]["message"]["content"]
+                return content.strip()
+            else:
+                raise Exception(f"OpenAI API Error {response.status_code}: {response.text}")
+                
         except Exception as e:
             print(f"[{self.name}] OpenAI call failed: {e}")
             raise e
@@ -63,19 +61,21 @@ class BaseWorker:
             if not transcript or len(transcript) < 50:
                 return self._get_fallback_content()
             
-            return await self._generate_content(transcript)
+            # Run sync function in thread to make it "async"
+            import asyncio
+            return await asyncio.to_thread(self._generate_content_sync, transcript)
             
         except Exception as e:
             print(f"[{self.name}] Generation failed: {e}")
             return self._get_fallback_content()
     
+    def _generate_content_sync(self, transcript: str) -> str:
+        """Override in subclasses - synchronous version."""
+        raise NotImplementedError
+    
     def _get_fallback_content(self) -> str:
         """Fallback content when generation fails."""
         return f"# {self.name.title()}\n\nContent analysis for this section."
-    
-    async def _generate_content(self, transcript: str) -> str:
-        """Override in subclasses."""
-        raise NotImplementedError
 
 class TitleWorker(BaseWorker):
     """Generate SEO-optimized titles."""
@@ -83,7 +83,7 @@ class TitleWorker(BaseWorker):
     def __init__(self):
         super().__init__("title")
     
-    async def _generate_content(self, transcript: str) -> str:
+    def _generate_content_sync(self, transcript: str) -> str:
         messages = [
             {
                 "role": "system",
@@ -95,7 +95,7 @@ class TitleWorker(BaseWorker):
             }
         ]
         
-        result = await self._call_openai(messages, max_tokens=100)
+        result = self._call_openai_sync(messages, max_tokens=100)
         
         # Ensure it starts with #
         if not result.startswith('#'):
@@ -112,7 +112,7 @@ class IntroWorker(BaseWorker):
     def __init__(self):
         super().__init__("intro")
     
-    async def _generate_content(self, transcript: str) -> str:
+    def _generate_content_sync(self, transcript: str) -> str:
         messages = [
             {
                 "role": "system",
@@ -124,7 +124,7 @@ class IntroWorker(BaseWorker):
             }
         ]
         
-        return await self._call_openai(messages, max_tokens=300)
+        return self._call_openai_sync(messages, max_tokens=300)
     
     def _get_fallback_content(self) -> str:
         return "This video provides valuable insights and information on important topics that can benefit viewers interested in learning more about the subject matter."
@@ -135,7 +135,7 @@ class KeyPointsWorker(BaseWorker):
     def __init__(self):
         super().__init__("key_points")
     
-    async def _generate_content(self, transcript: str) -> str:
+    def _generate_content_sync(self, transcript: str) -> str:
         messages = [
             {
                 "role": "system",
@@ -147,7 +147,7 @@ class KeyPointsWorker(BaseWorker):
             }
         ]
         
-        result = await self._call_openai(messages, max_tokens=800)
+        result = self._call_openai_sync(messages, max_tokens=800)
         
         # Ensure proper formatting
         if not result.startswith("##"):
@@ -169,7 +169,7 @@ class QuotesWorker(BaseWorker):
     def __init__(self):
         super().__init__("quotes")
     
-    async def _generate_content(self, transcript: str) -> str:
+    def _generate_content_sync(self, transcript: str) -> str:
         messages = [
             {
                 "role": "system",
@@ -181,7 +181,7 @@ class QuotesWorker(BaseWorker):
             }
         ]
         
-        result = await self._call_openai(messages, max_tokens=500)
+        result = self._call_openai_sync(messages, max_tokens=500)
         
         if not result.startswith("##"):
             result = f"## Notable Quotes\n\n{result}"
@@ -199,7 +199,7 @@ class SummaryWorker(BaseWorker):
     def __init__(self):
         super().__init__("summary")
     
-    async def _generate_content(self, transcript: str) -> str:
+    def _generate_content_sync(self, transcript: str) -> str:
         messages = [
             {
                 "role": "system",
@@ -211,7 +211,7 @@ class SummaryWorker(BaseWorker):
             }
         ]
         
-        result = await self._call_openai(messages, max_tokens=600)
+        result = self._call_openai_sync(messages, max_tokens=600)
         
         if not result.startswith("##"):
             result = f"## Summary\n\n{result}"
@@ -229,7 +229,7 @@ class ConclusionWorker(BaseWorker):
     def __init__(self):
         super().__init__("conclusion")
     
-    async def _generate_content(self, transcript: str) -> str:
+    def _generate_content_sync(self, transcript: str) -> str:
         messages = [
             {
                 "role": "system",
@@ -241,7 +241,7 @@ class ConclusionWorker(BaseWorker):
             }
         ]
         
-        result = await self._call_openai(messages, max_tokens=400)
+        result = self._call_openai_sync(messages, max_tokens=400)
         
         if not result.startswith("##"):
             result = f"## Conclusion\n\n{result}"
@@ -259,7 +259,7 @@ class SEOWorker(BaseWorker):
     def __init__(self):
         super().__init__("seo")
     
-    async def _generate_content(self, transcript: str) -> str:
+    def _generate_content_sync(self, transcript: str) -> str:
         messages = [
             {
                 "role": "system",
@@ -271,7 +271,7 @@ class SEOWorker(BaseWorker):
             }
         ]
         
-        result = await self._call_openai(messages, max_tokens=200)
+        result = self._call_openai_sync(messages, max_tokens=200)
         
         # Format as metadata
         if "META_DESCRIPTION:" not in result:
@@ -290,7 +290,7 @@ class TagsWorker(BaseWorker):
     def __init__(self):
         super().__init__("tags")
     
-    async def _generate_content(self, transcript: str) -> str:
+    def _generate_content_sync(self, transcript: str) -> str:
         messages = [
             {
                 "role": "system",
@@ -302,7 +302,7 @@ class TagsWorker(BaseWorker):
             }
         ]
         
-        result = await self._call_openai(messages, max_tokens=100)
+        result = self._call_openai_sync(messages, max_tokens=100)
         
         # Ensure proper formatting
         if not result.startswith("Tags:") and not result.startswith("#"):

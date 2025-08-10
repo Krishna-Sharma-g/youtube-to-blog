@@ -197,20 +197,18 @@ def main():
                 st.session_state.url_input = test_url
                 st.experimental_rerun()
                 # Add this test function to your web_app.py
-async def test_openai_connection():
-    """Test OpenAI API connectivity."""
+# Replace the test_openai_connection function with this:
+def test_openai_connection_sync():
+    """Test OpenAI API connectivity using requests."""
     try:
-        import aiohttp
-        import json
-        
         # Get API key
         try:
             api_key = st.secrets["OPENAI_API_KEY"]
         except:
-            return False, "OpenAI API key not found in secrets"
-        
-        if not api_key.startswith("sk-"):
-            return False, "Invalid API key format"
+            api_key = os.getenv("OPENAI_API_KEY")
+            
+        if not api_key or not api_key.startswith("sk-"):
+            return False, "OpenAI API key not found or invalid format"
         
         # Test API call
         headers = {
@@ -224,22 +222,29 @@ async def test_openai_connection():
             "max_tokens": 10
         }
         
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    return True, "OpenAI API working"
-                else:
-                    error_text = await response.text()
-                    return False, f"API Error {response.status}: {error_text}"
-                    
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            return True, "OpenAI API working perfectly!"
+        else:
+            return False, f"API Error {response.status_code}: {response.text[:200]}"
+            
     except Exception as e:
         return False, f"Connection error: {str(e)}"
+
+# Update the button to use sync function:
+if st.button("🧪 Test OpenAI Connection"):
+    with st.spinner("Testing OpenAI API..."):
+        is_working, message = test_openai_connection_sync()
+        if is_working:
+            st.success(f"✅ {message}")
+        else:
+            st.error(f"❌ {message}")
 
 # Add this to your main() function before processing
 def main():
