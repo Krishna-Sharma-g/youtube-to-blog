@@ -3,6 +3,7 @@ import asyncio
 from typing import Dict, List
 from pathlib import Path
 import time
+import os
 
 from workers.implementations import (
     TitleWorker, IntroWorker, KeyPointsWorker, 
