@@ -198,6 +198,7 @@ def main():
                 st.experimental_rerun()
                 # Add this test function to your web_app.py
 # Replace the test_openai_connection function with this:
+# Replace the test_openai_connection function with this:
 def test_openai_connection_sync():
     """Test OpenAI API connectivity using requests."""
     try:
@@ -245,23 +246,6 @@ if st.button("🧪 Test OpenAI Connection"):
             st.success(f"✅ {message}")
         else:
             st.error(f"❌ {message}")
-
-# Add this to your main() function before processing
-def main():
-    # ... existing code ...
-    
-    # Test OpenAI connection
-    if st.button("🧪 Test OpenAI Connection"):
-        with st.spinner("Testing OpenAI API..."):
-            try:
-                is_working, message = asyncio.run(test_openai_connection())
-                if is_working:
-                    st.success(f"✅ {message}")
-                else:
-                    st.error(f"❌ {message}")
-            except Exception as e:
-                st.error(f"❌ Test failed: {e}")
-
 
 # ✅ CORRECT: Entry point that calls main function
 if __name__ == "__main__":
