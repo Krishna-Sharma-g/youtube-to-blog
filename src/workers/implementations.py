@@ -16,8 +16,49 @@ def chunk_text(text: str, max_words: int = 800) -> List[str]:
             chunks.append(chunk)
     return chunks
 
+def build_ml_researcher_prompt(messages: List[Dict]) -> List[Dict]:
+    """Add unified ML researcher role and audience to every prompt."""
+    
+    ml_researcher_instruction = """You are a machine learning researcher and educator writing for ML enthusiasts of all ages and backgrounds - from curious beginners to seasoned practitioners.
+
+YOUR ROLE: Write as an experienced ML researcher who loves sharing knowledge in an accessible way.
+
+YOUR AUDIENCE: ML enthusiasts ranging from students just starting out to industry professionals looking for fresh insights.
+
+WRITING STYLE REQUIREMENTS:
+- Write like you're having a genuine conversation with a fellow researcher over coffee
+- Mix short, punchy sentences with longer, flowing ones for natural rhythm  
+- Use unexpected word choices occasionally - avoid predictable academic language
+- Include natural transitions like "Here's the thing," "What I've discovered is," "In my experience..."
+- Ask rhetorical questions and speak directly using "you" and "your"
+- Show genuine personality and don't be afraid to have research-backed opinions
+- Include brief personal research experiences or examples when relevant
+
+ABSOLUTELY AVOID THESE BUZZWORDS:
+- "delve," "leverage," "robust," "seamless," "cutting-edge," "game-changing," "furthermore," "navigate," "elevate," "comprehensive"
+- "unlock," "harness," "optimize," "streamline," "innovative," "revolutionary," "transform"
+- Overly academic jargon unless necessary for precision
+- Corporate speak and marketing language
+- Starting sentences with "In the rapidly evolving field of ML" or similar clichés
+
+TECHNICAL APPROACH:
+- Explain complex concepts simply without dumbing them down
+- Use analogies and real-world examples when helpful
+- Share practical insights from actual ML work
+- Bridge theory and application naturally
+- Make advanced topics accessible to different experience levels
+- Every sentence should serve the reader, not sound impressive"""
+
+    # Add ML researcher instruction to existing system message or create new one
+    if messages and messages[0]["role"] == "system":
+        messages["content"] = ml_researcher_instruction + "\n\n" + messages["content"]
+    else:
+        messages.insert(0, {"role": "system", "content": ml_researcher_instruction})
+    
+    return messages
+
 class BaseWorker:
-    """Enhanced base worker for premium content generation."""
+    """Enhanced base worker with unified ML researcher persona."""
     
     def __init__(self, name: str):
         self.name = name
@@ -37,10 +78,13 @@ class BaseWorker:
         
         raise ValueError("OpenAI API key not found or invalid")
     
-    def _call_openai_premium(self, messages: List[Dict], max_tokens: int = 2000) -> str:
-        """Premium OpenAI call with enhanced parameters."""
+    def _call_openai_as_ml_researcher(self, messages: List[Dict], max_tokens: int = 2000) -> str:
+        """ML researcher OpenAI call with unified persona."""
         try:
             api_key = self.get_openai_api_key()
+            
+            # Apply ML researcher persona to all prompts
+            ml_messages = build_ml_researcher_prompt(messages)
             
             headers = {
                 "Authorization": f"Bearer {api_key}",
@@ -48,19 +92,19 @@ class BaseWorker:
             }
             
             data = {
-                "model": "gpt-4o",  # Use GPT-4 for better quality
-                "messages": messages,
+                "model": "gpt-4o",
+                "messages": ml_messages,
                 "max_tokens": max_tokens,
-                "temperature": 0.8,  # Higher creativity
-                "presence_penalty": 0.1,
-                "frequency_penalty": 0.1
+                "temperature": 0.8,  # Balanced for technical accuracy and natural flow
+                "presence_penalty": 0.2,  # Encourage unique insights
+                "frequency_penalty": 0.2   # Avoid repetitive academic language
             }
             
             response = requests.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers=headers,
                 json=data,
-                timeout=120  # Longer timeout for detailed content
+                timeout=120
             )
             
             if response.status_code == 200:
@@ -71,397 +115,379 @@ class BaseWorker:
                 raise Exception(f"OpenAI API Error {response.status_code}: {response.text}")
                 
         except Exception as e:
-            print(f"[{self.name}] Premium OpenAI call failed: {e}")
+            print(f"[{self.name}] ML researcher call failed: {e}")
             raise e
     
     async def generate(self, transcript: str) -> str:
-        """Generate premium content with chunking and detailed analysis."""
+        """Generate ML researcher content with chunking and detailed analysis."""
         try:
             if not transcript or len(transcript) < 100:
                 return self._get_fallback_content()
             
-            # Chunk transcript for detailed analysis
             chunks = chunk_text(transcript, max_words=1000)
             
             import asyncio
-            return await asyncio.to_thread(self._generate_premium_content, chunks)
+            return await asyncio.to_thread(self._generate_ml_content, chunks)
             
         except Exception as e:
             print(f"[{self.name}] Generation failed: {e}")
             return self._get_fallback_content()
     
-    def _generate_premium_content(self, chunks: List[str]) -> str:
-        """Override in subclasses for premium content generation."""
+    def _generate_ml_content(self, chunks: List[str]) -> str:
+        """Override in subclasses for ML researcher content generation."""
         raise NotImplementedError
     
     def _get_fallback_content(self) -> str:
-        """High-quality fallback content."""
-        return f"## {self.name.title()} Analysis\n\nDetailed analysis of this content section."
+        """ML researcher fallback content."""
+        return f"## {self.name.title()}\n\nAs an ML researcher, let me break down what we discovered in this section..."
 
 class TitleWorker(BaseWorker):
-    """Generate compelling, SEO-optimized titles."""
+    """Generate compelling titles from an ML researcher perspective."""
     
     def __init__(self):
         super().__init__("title")
     
-    def _generate_premium_content(self, chunks: List[str]) -> str:
-        # Use first chunk for title generation
+    def _generate_ml_content(self, chunks: List[str]) -> str:
         primary_content = chunks[0] if chunks else ""
         
         messages = [
             {
                 "role": "system",
-                "content": """You are an expert content writer and SEO specialist. Create compelling, click-worthy titles that:
-                - Are emotionally engaging and curiosity-driven
-                - Include specific benefits or outcomes
-                - Use power words and numbers when appropriate
-                - Are optimized for search engines
-                - Capture the essence of the content perfectly
-                
-                Examples of great titles:
-                - "How I Landed My Dream Internship at IIT Bombay: A Complete Interview Journey"
-                - "From 4000 Applicants to Final Selection: My Trust Lab Experience"
-                - "The 10 Life-Changing Rules That Transformed My 2025 (Backed by Science)"
-                """
+                "content": """As an ML researcher, create a compelling title that would make fellow ML enthusiasts curious to learn more. Think about how you'd naturally describe this content in a research group discussion.
+
+Make it:
+- Technically accurate but accessible
+- Engaging without being clickbait-y
+- Specific about the ML concepts or insights covered
+- Something that would catch the attention of both beginners and experts
+
+Examples of good ML researcher titles:
+- "What 10,000 Failed Experiments Taught Me About Feature Engineering"
+- "Why Your Neural Network Isn't Learning (And How I Fixed Mine)"
+- "The Counterintuitive Truth About Overfitting That Changed My Approach"
+- "From Theory to Production: Lessons from Deploying ML Models at Scale"
+
+Avoid generic academic titles or corporate buzzwords."""
             },
             {
                 "role": "user",
-                "content": f"""Create a compelling, detailed title for this video content. Make it engaging and specific:
+                "content": f"""Create a compelling, researcher-friendly title for this content that would appeal to ML enthusiasts of all levels:
 
 {primary_content[:1500]}
 
-Generate ONLY the title with a # markdown header. Make it feel personal and story-driven."""
+Write ONLY the title with a # markdown header."""
             }
         ]
         
-        result = self._call_openai_premium(messages, max_tokens=200)
+        result = self._call_openai_as_ml_researcher(messages, max_tokens=150)
         
         if not result.startswith('#'):
             result = f"# {result}"
         
         return result
-    
-    def _get_fallback_content(self) -> str:
-        return "# Insights and Lessons from This Video: A Deep Dive Analysis"
 
 class IntroWorker(BaseWorker):
-    """Generate engaging, story-driven introductions."""
+    """Generate engaging introductions from ML researcher perspective."""
     
     def __init__(self):
         super().__init__("intro")
     
-    def _generate_premium_content(self, chunks: List[str]) -> str:
-        # Use first 2 chunks for comprehensive intro
+    def _generate_ml_content(self, chunks: List[str]) -> str:
         intro_content = ' '.join(chunks[:2]) if len(chunks) >= 2 else chunks[0] if chunks else ""
         
         messages = [
             {
                 "role": "system",
-                "content": """You are a master storyteller and content writer. Create engaging introductions that:
-                - Hook the reader immediately with a compelling opening
-                - Set the scene and provide context
-                - Create emotional connection
-                - Promise valuable insights
-                - Use narrative techniques and personal language
-                - Are 200-400 words long
-                
-                Study this example style:
-                "I hope you've read the article I published recently. If it isn't the case, you can read it to get a broader understanding. I'll come straight to the point of article, considering the case that you're familiar about internships at esteemed research institutes."
-                
-                Write in first person when appropriate, create suspense, and make it feel like a personal story."""
+                "content": """Write an introduction that hooks ML enthusiasts like you're starting a fascinating research discussion. Think about how you'd naturally introduce this topic to colleagues at a conference or study group.
+
+Your intro should:
+- Start with something relatable to the ML community
+- Connect theory to practical experience when possible
+- Set up the learning opportunity without being dry
+- Use natural language that appeals to both newcomers and experts
+- Show your researcher perspective and curiosity
+
+Good examples:
+- "You know that feeling when your model finally converges after days of hyperparameter tuning? Well, this explores something even more fundamental..."
+- "I used to think [common ML belief] until I ran into this problem in production..."
+- "Here's something that might surprise you about how neural networks actually learn..."
+
+Make it 150-300 words and conversational but technically grounded."""
             },
             {
                 "role": "user",
-                "content": f"""Write a compelling, engaging introduction for this video content. Make it feel like a personal story that draws readers in:
+                "content": f"""Write a natural, engaging introduction for this ML content. Hook fellow researchers and enthusiasts with genuine curiosity:
 
 {intro_content[:2000]}
 
-Create a narrative introduction that hooks the reader and sets up the content beautifully. Use storytelling techniques and make it personal."""
+Make it engaging and technically credible, appealing to ML enthusiasts of all levels."""
             }
         ]
         
-        return self._call_openai_premium(messages, max_tokens=600)
-    
-    def _get_fallback_content(self) -> str:
-        return """Have you ever wondered what separates successful people from the rest? In this comprehensive analysis, we dive deep into strategies and insights that can transform your approach to life and work. 
-
-What you're about to discover isn't just another collection of tips – it's a detailed breakdown of proven principles that have helped countless individuals achieve their goals and create meaningful change in their lives."""
+        return self._call_openai_as_ml_researcher(messages, max_tokens=400)
 
 class KeyPointsWorker(BaseWorker):
-    """Extract and elaborate on key insights with detailed analysis."""
+    """Extract key ML insights with researcher-level analysis."""
     
     def __init__(self):
         super().__init__("key_points")
     
-    def _generate_premium_content(self, chunks: List[str]) -> str:
-        # Use all chunks for comprehensive key points analysis
+    def _generate_ml_content(self, chunks: List[str]) -> str:
         full_content = ' '.join(chunks)
         
         messages = [
             {
                 "role": "system",
-                "content": """You are an expert analyst and content strategist. Extract and elaborate on key points with:
-                - Detailed explanations of each concept
-                - Practical applications and examples
-                - Why each point matters
-                - How to implement the insights
-                - Personal reflections where appropriate
-                - Rich, narrative descriptions
-                
-                Format as clear sections with headers and detailed explanations. Make each point substantial and valuable.
-                
-                Example format:
-                ## Key Insights and Strategies
-                
-                ### 1. The Power of Strategic Thinking
-                [Detailed explanation with examples and applications]
-                
-                ### 2. Building Resilience in Challenging Times
-                [In-depth analysis with actionable steps]
-                """
+                "content": """Extract the main ML insights and explain them like you're sharing interesting research findings with colleagues. 
+
+For each key point:
+- Explain the concept clearly for different experience levels
+- Connect to broader ML principles when relevant
+- Include practical implications for real ML work
+- Use research-backed reasoning
+- Make it engaging with natural transitions
+
+Structure like:
+## Key Research Insights
+
+### The Surprising Thing About [ML Concept]
+Here's what I found interesting about this approach... [technical but accessible explanation]
+
+### Why This Matters for Practical ML  
+You know how we always struggle with... well, this addresses that by...
+
+### The Connection to [Related ML Theory]
+This actually ties back to something fundamental about...
+
+Keep it technically accurate but engaging for the ML community."""
             },
             {
                 "role": "user",
-                "content": f"""Analyze this content and extract the most important insights. Provide detailed explanations, practical applications, and rich context for each key point:
+                "content": f"""Extract and explain the key ML insights from this content. Write like you're sharing research findings with fellow ML enthusiasts:
 
 {full_content[:4000]}
 
-Create comprehensive, detailed key points that provide real value to readers. Make each point substantial with explanations and examples."""
+Make each point technically solid with clear explanations for different experience levels."""
             }
         ]
         
-        return self._call_openai_premium(messages, max_tokens=2000)
-    
-    def _get_fallback_content(self) -> str:
-        return """## Key Insights and Strategies
-
-### 1. Strategic Mindset Development
-Understanding how to think strategically about your goals and approach challenges with a systematic mindset.
-
-### 2. Building Sustainable Habits
-Creating systems and routines that support long-term growth and success.
-
-### 3. Leveraging Opportunities
-Recognizing and capitalizing on moments that can accelerate your progress."""
+        return self._call_openai_as_ml_researcher(messages, max_tokens=1500)
 
 class QuotesWorker(BaseWorker):
-    """Extract meaningful quotes with rich context and analysis."""
+    """Extract meaningful quotes with ML researcher commentary."""
     
     def __init__(self):
         super().__init__("quotes")
     
-    def _generate_premium_content(self, chunks: List[str]) -> str:
-        # Use all chunks to find the best quotes
+    def _generate_ml_content(self, chunks: List[str]) -> str:
         full_content = ' '.join(chunks)
         
         messages = [
             {
                 "role": "system",
-                "content": """You are a content curator specializing in extracting meaningful quotes. Find the most impactful statements and:
-                - Provide rich context for each quote
-                - Explain why it's significant
-                - Connect it to broader themes
-                - Add analytical commentary
-                - Show practical applications
-                
-                Format example:
-                ## Notable Insights and Quotes
-                
-                > "Success is not just about luck but also about mindset, dedication, and hard work."
-                
-                This powerful statement encapsulates the multi-faceted nature of achievement. It challenges the common misconception that success is purely circumstantial, instead highlighting the critical role of personal agency and consistent effort. The emphasis on mindset particularly resonates because...
-                """
+                "content": """Find the most insightful quotes and analyze them from an ML researcher's perspective. Don't just list quotes - explain why they resonate with the ML community.
+
+For each quote:
+- Provide technical context when relevant
+- Connect to ML theory or practice
+- Share why it's significant for ML practitioners
+- Use conversational analysis style
+
+Format like:
+## Insights That Resonated
+
+This really caught my attention:
+
+> "[Quote here]"
+
+What makes this powerful from an ML perspective is... [your research-informed commentary]
+
+Or:
+
+> "[Another quote]"
+
+Here's why this matters for our field - it touches on something we all deal with in [specific ML context]...
+
+Make it feel like you're highlighting interesting insights for fellow researchers."""
             },
             {
                 "role": "user",
-                "content": f"""Extract the most meaningful and impactful quotes from this content. Provide rich context, analysis, and significance for each quote:
+                "content": f"""Find the most impactful quotes and analyze them from an ML researcher's perspective:
 
 {full_content[:4000]}
 
-Find 3-4 powerful quotes and provide detailed context and analysis for each. Make them meaningful and well-explained."""
+Pick 2-3 powerful quotes and give research-informed commentary on each."""
             }
         ]
         
-        return self._call_openai_premium(messages, max_tokens=1200)
-    
-    def _get_fallback_content(self) -> str:
-        return """## Notable Insights and Quotes
-
-> "Success requires both strategic thinking and consistent execution."
-
-This insight highlights the dual nature of achievement - having a clear plan while maintaining the discipline to follow through consistently.
-
-> "The difference between successful and unsuccessful people often lies in how they handle setbacks."
-
-A powerful reminder that resilience and adaptability are crucial skills for long-term success."""
+        return self._call_openai_as_ml_researcher(messages, max_tokens=800)
 
 class SummaryWorker(BaseWorker):
-    """Generate comprehensive, insightful summaries."""
+    """Generate comprehensive summaries from ML researcher viewpoint."""
     
     def __init__(self):
         super().__init__("summary")
     
-    def _generate_premium_content(self, chunks: List[str]) -> str:
-        # Use all chunks for comprehensive summary
+    def _generate_ml_content(self, chunks: List[str]) -> str:
         full_content = ' '.join(chunks)
         
         messages = [
             {
                 "role": "system",
-                "content": """You are an expert content synthesizer. Create comprehensive summaries that:
-                - Capture all major themes and insights
-                - Provide analytical depth
-                - Connect different concepts together
-                - Offer broader context and implications
-                - Are well-structured and narrative-driven
-                - Feel like a thoughtful analysis, not just bullet points
-                
-                Write in a flowing, analytical style that demonstrates deep understanding of the content."""
+                "content": """Summarize this like you're explaining interesting research or insights to fellow ML practitioners. Be natural and technically grounded.
+
+Your summary should:
+- Capture the main themes from an ML perspective
+- Connect different concepts using ML frameworks
+- Point out what was most valuable for the ML community
+- Use researcher language but keep it accessible
+- Make connections to broader ML principles
+
+Start with something like:
+- "So here's what this exploration really revealed about..."
+- "The main insights I took from this for our ML work..."
+- "What made this particularly relevant for practitioners was..."
+
+Keep it substantial but readable - like sharing research insights with colleagues."""
             },
             {
                 "role": "user",
-                "content": f"""Create a comprehensive, analytical summary of this content. Synthesize the main themes, insights, and implications:
+                "content": f"""Summarize this content from an ML researcher's perspective, highlighting what's most valuable for the ML community:
 
 {full_content[:4000]}
 
-Write a detailed summary that demonstrates deep understanding and provides valuable analysis. Make it substantial and insightful."""
+Make it natural and technically grounded, appealing to ML enthusiasts of all levels."""
             }
         ]
         
-        result = self._call_openai_premium(messages, max_tokens=1000)
+        result = self._call_openai_as_ml_researcher(messages, max_tokens=600)
         
         if not result.startswith("##"):
-            result = f"## Summary and Analysis\n\n{result}"
+            result = f"## Research Summary\n\n{result}"
         
         return result
-    
-    def _get_fallback_content(self) -> str:
-        return """## Summary and Analysis
-
-This content provides a comprehensive exploration of strategies and principles that can drive meaningful change and success. The analysis reveals several interconnected themes around mindset development, strategic thinking, and practical implementation of growth-oriented behaviors."""
 
 class ConclusionWorker(BaseWorker):
-    """Generate compelling, actionable conclusions."""
+    """Generate actionable conclusions from ML researcher perspective."""
     
     def __init__(self):
         super().__init__("conclusion")
     
-    def _generate_premium_content(self, chunks: List[str]) -> str:
-        # Use last chunks and overall theme for conclusion
+    def _generate_ml_content(self, chunks: List[str]) -> str:
         conclusion_content = ' '.join(chunks[-2:]) if len(chunks) >= 2 else chunks[-1] if chunks else ""
         
         messages = [
             {
                 "role": "system",
-                "content": """You are a motivational writer and strategist. Create powerful conclusions that:
-                - Reinforce key takeaways
-                - Provide clear next steps
-                - Inspire action
-                - Connect to the reader's journey
-                - Feel personal and motivating
-                - Include specific calls to action
-                
-                Study this style:
-                "Let this video be a catalyst for positive change in your life. Embrace the mindset of a winner, set your goals high, and take proactive steps towards achieving your dreams. Remember, success is within your reach if you are willing to put in the work. Start today and pave the way for a brighter future."
-                
-                Make it inspirational but practical."""
+                "content": """Write a conclusion that feels like the natural end of a research discussion with fellow ML practitioners. Tie insights together and suggest practical next steps.
+
+Your conclusion should:
+- Synthesize the main ML insights naturally
+- Suggest practical applications or further exploration
+- End with encouraging but realistic research perspective
+- Feel like advice from an experienced colleague
+- Connect to ongoing challenges in ML
+
+Examples of good researcher endings:
+- "Look, the key takeaway for our ML work is..."
+- "If I were applying this to my next project, I'd focus on..."
+- "The interesting research question this raises is..."
+
+Make it feel like thoughtful guidance from a peer researcher."""
             },
             {
                 "role": "user",
-                "content": f"""Write a compelling conclusion that inspires action and provides clear next steps based on this content:
+                "content": f"""Write a natural conclusion that ties this together from an ML researcher's perspective and gives fellow enthusiasts something actionable:
 
 {conclusion_content[:2000]}
 
-Create a motivational yet practical conclusion that helps readers take action. Make it personal and actionable."""
+Make it feel like genuine research guidance from a colleague, not generic motivation."""
             }
         ]
         
-        result = self._call_openai_premium(messages, max_tokens=600)
+        result = self._call_openai_as_ml_researcher(messages, max_tokens=400)
         
         if not result.startswith("##"):
-            result = f"## Moving Forward: Your Next Steps\n\n{result}"
+            result = f"## Research Directions\n\n{result}"
         
         return result
-    
-    def _get_fallback_content(self) -> str:
-        return """## Moving Forward: Your Next Steps
-
-The insights and strategies covered here provide a solid foundation for meaningful change and growth. The key to success lies not just in understanding these concepts, but in consistently applying them to your daily life and long-term goals.
-
-Start by choosing one or two key principles that resonate most with your current situation. Focus on implementing these gradually, building sustainable habits that will compound over time. Remember, transformation is a journey that requires both patience and persistence.
-
-Take action today – even small steps forward are better than standing still."""
 
 class SEOWorker(BaseWorker):
-    """Generate comprehensive SEO metadata."""
+    """Generate ML-focused SEO metadata."""
     
     def __init__(self):
         super().__init__("seo")
     
-    def _generate_premium_content(self, chunks: List[str]) -> str:
-        # Use full content for SEO analysis
+    def _generate_ml_content(self, chunks: List[str]) -> str:
         full_content = ' '.join(chunks)
         
         messages = [
             {
                 "role": "system",
-                "content": """You are an SEO expert. Generate comprehensive metadata including:
-                - Compelling meta description (150-160 characters)
-                - Relevant keywords (focus + long-tail)
-                - Topic clusters
-                
-                Format as:
-                META_DESCRIPTION: "[Engaging description that includes key benefit/outcome]"
-                KEYWORDS: "[Primary keyword], [secondary keywords], [long-tail keywords]"
-                """
+                "content": """Create SEO metadata that would appeal to the ML community searching for technical content.
+
+For the meta description:
+- Write like you're describing research insights to colleagues
+- Include relevant ML terms people actually search for
+- Make it compelling for technical audiences
+- Keep it under 160 characters
+- Avoid buzzwords but include searchable ML keywords
+
+For keywords:
+- Focus on ML terms and concepts people research
+- Include both technical and accessible phrases
+- Think about what ML enthusiasts would Google
+- Mix theoretical and practical search terms
+
+Format as:
+META_DESCRIPTION: "[Technical but accessible description for ML community]"
+KEYWORDS: "[ML-relevant search terms and concepts]" """
             },
             {
                 "role": "user",
-                "content": f"""Generate SEO metadata for this content:
+                "content": f"""Create ML-focused SEO metadata for this content:
 
 {full_content[:2000]}
 
-Create compelling meta description and relevant keywords."""
+Write for ML practitioners searching for technical insights and learning resources."""
             }
         ]
         
-        return self._call_openai_premium(messages, max_tokens=300)
-    
-    def _get_fallback_content(self) -> str:
-        return 'META_DESCRIPTION: "Discover proven strategies and insights for personal growth and success. Learn actionable techniques that can transform your mindset and accelerate your progress."\nKEYWORDS: "personal development, success strategies, mindset transformation, growth mindset, life improvement, productivity tips"'
+        return self._call_openai_as_ml_researcher(messages, max_tokens=200)
 
 class TagsWorker(BaseWorker):
-    """Generate relevant, strategic tags."""
+    """Generate ML-relevant, searchable tags."""
     
     def __init__(self):
         super().__init__("tags")
     
-    def _generate_premium_content(self, chunks: List[str]) -> str:
-        # Use content overview for tag generation
+    def _generate_ml_content(self, chunks: List[str]) -> str:
         content_sample = ' '.join(chunks)[:1500]
         
         messages = [
             {
                 "role": "system",
-                "content": """Generate 8-12 strategic hashtags that:
-                - Mix popular and niche tags
-                - Include topic-specific keywords
-                - Cover different aspects of the content
-                - Are actually searchable and relevant
-                
-                Format: Tags: #tag1 #tag2 #tag3 etc."""
+                "content": """Generate hashtags that ML enthusiasts actually use and search for. Think about:
+- What tags would ML researchers and practitioners follow?
+- Mix popular ML tags with more specific technical ones
+- Include relevant ML concepts and methodologies
+- Avoid overly generic tags unless they're ML-relevant
+
+Format: Tags: #tag1 #tag2 #tag3 etc.
+
+Keep it to 8-12 really relevant ML tags rather than 20 random ones."""
             },
             {
                 "role": "user",
-                "content": f"""Generate strategic hashtags for this content:
+                "content": f"""Generate relevant ML hashtags for this content:
 
 {content_sample}
 
-Create relevant, searchable tags that cover the main topics."""
+Pick tags that ML enthusiasts and researchers would actually search for."""
             }
         ]
         
-        return self._call_openai_premium(messages, max_tokens=150)
+        return self._call_openai_as_ml_researcher(messages, max_tokens=100)
     
     def _get_fallback_content(self) -> str:
-        return "Tags: #PersonalDevelopment #SuccessStrategies #MindsetGrowth #SelfImprovement #ProductivityTips #LifeHacks #Motivation #GoalSetting #PersonalGrowth #Leadership"
+        return "Tags: #MachineLearning #MLResearch #DataScience #AI #DeepLearning #MLEngineering #AIResearch #TechInsights #MLCommunity #DataScientist"
