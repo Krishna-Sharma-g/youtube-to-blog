@@ -3,7 +3,7 @@ import asyncio
 from typing import Dict, List
 from pathlib import Path
 import time
-import os
+import traceback
 
 from workers.implementations import (
     TitleWorker, IntroWorker, KeyPointsWorker, 
@@ -14,12 +14,10 @@ from utils.youtube_processor import fetch_transcript
 
 class BlogOrchestrator:
     """
-    Orchestrates blog generation from YouTube videos.
-    Fixed indentation and proper function bodies.
+    Robust orchestrator with comprehensive debugging and error handling.
     """
     
     def __init__(self):
-        """Initialize the orchestrator with all workers."""
         self.workers = [
             TitleWorker(),
             IntroWorker(), 
@@ -30,149 +28,185 @@ class BlogOrchestrator:
             SEOWorker(),
             TagsWorker(),
         ]
-        print(f"[Orchestrator] Initialized {len(self.workers)} workers")
+        print(f"[Orchestrator] ✅ Initialized {len(self.workers)} workers")
     
     def _validate_real_transcript(self, transcript: str) -> bool:
-        """Validate that we have real, meaningful content."""
-        if not transcript or len(transcript.strip()) < 50:
-            print("[Orchestrator] ❌ Content too short")
+        """Strict transcript validation with detailed logging."""
+        print(f"[Orchestrator] Validating transcript...")
+        
+        if not transcript:
+            print("[Orchestrator] ❌ Transcript is None or empty")
             return False
         
-        transcript_lower = transcript.lower()
+        transcript_clean = transcript.strip()
+        print(f"[Orchestrator] Transcript length after cleaning: {len(transcript_clean)}")
         
-        # Only reject clear error cases
-        hard_rejection_phrases = [
-            'video processing error',
-            'an error occurred while processing',
-            'invalid video url format'
+        if len(transcript_clean) < 200:
+            print(f"[Orchestrator] ❌ Transcript too short: {len(transcript_clean)} chars")
+            return False
+        
+        # Check for error messages in transcript
+        error_markers = [
+            'could not extract', 'failed to extract', 'error occurred',
+            'try a different video', 'video may be private', 'no speech content'
         ]
         
-        for phrase in hard_rejection_phrases:
-            if phrase in transcript_lower:
-                print(f"[Orchestrator] ❌ Hard rejection: {phrase}")
+        transcript_lower = transcript_clean.lower()
+        for marker in error_markers:
+            if marker in transcript_lower:
+                print(f"[Orchestrator] ❌ Error marker found: '{marker}'")
                 return False
         
-        # Accept if we have ANY meaningful content
-        content_indicators = [
-            'video', 'title', 'description', 'content', 'analysis',
-            'creator', 'channel', 'topic', 'subject', 'information',
-            'discusses', 'covers', 'provides', 'insights', 'valuable'
-        ]
+        # Check for substantial content
+        words = transcript_clean.split()
+        unique_words = set(w.lower() for w in words if len(w) > 3)
         
-        found_indicators = sum(1 for indicator in content_indicators if indicator in transcript_lower)
+        print(f"[Orchestrator] Word count: {len(words)}, unique words: {len(unique_words)}")
         
-        if found_indicators >= 3:
-            print(f"[Orchestrator] ✅ Content accepted ({found_indicators} indicators)")
-            return True
+        if len(words) < 100:
+            print(f"[Orchestrator] ❌ Too few words: {len(words)}")
+            return False
         
-        # Also accept based on length - if we have substantial text, it's probably good
-        word_count = len(transcript.split())
-        if word_count >= 50:
-            print(f"[Orchestrator] ✅ Content accepted ({word_count} words)")
-            return True
+        if len(unique_words) < 30:
+            print(f"[Orchestrator] ❌ Low vocabulary diversity: {len(unique_words)}")
+            return False
         
-        print(f"[Orchestrator] ❌ Content quality insufficient")
-        return False
+        print(f"[Orchestrator] ✅ Transcript validation passed")
+        return True
     
     async def generate_blog_post(self, youtube_url: str) -> Dict[str, str]:
-        """
-        Generate a complete blog post from a YouTube URL.
-        Main entry point for the orchestrator.
-        """
+        """Generate blog post with comprehensive error tracking."""
         print(f"[Orchestrator] 🚀 Starting blog generation for: {youtube_url}")
         
-        try:
-            # Extract transcript
-            transcript = await fetch_transcript(youtube_url)
+        # Step 1: Extract transcript with validation
+        print(f"[Orchestrator] Step 1: Extracting transcript...")
+        transcript = await fetch_transcript(youtube_url)
+        
+        print(f"[Orchestrator] Raw transcript length: {len(transcript) if transcript else 0}")
+        if transcript:
+            print(f"[Orchestrator] Transcript preview (first 300 chars):")
+            print(f"'{transcript[:300]}...'")
+        
+        # Step 2: Validate transcript
+        print(f"[Orchestrator] Step 2: Validating transcript...")
+        if not self._validate_real_transcript(transcript):
+            error_msg = (
+                "❌ Transcript validation failed. The video content could not be properly extracted. "
+                "Please try:\n"
+                "• A video with clear speech and captions\n"
+                "• Educational or tutorial content\n"
+                "• Videos longer than 5 minutes\n"
+                "• Popular videos from major creators"
+            )
+            print(f"[Orchestrator] {error_msg}")
+            raise RuntimeError(error_msg)
+        
+        # Step 3: Process with workers
+        print(f"[Orchestrator] Step 3: Processing with {len(self.workers)} workers...")
+        
+        sections = {}
+        successful_workers = 0
+        failed_workers = []
+        worker_errors = {}
+        
+        # Process each worker individually with detailed tracking
+        for i, worker in enumerate(self.workers, 1):
+            worker_name = worker.name
+            print(f"\n[Orchestrator] Processing worker {i}/{len(self.workers)}: {worker_name}")
             
-            # Validate transcript
-            if not self._validate_real_transcript(transcript):
-                raise RuntimeError(
-                    "Could not extract valid video content for analysis. "
-                    "Please try a different video with:\n"
-                    "• Clear speech and captions\n"
-                    "• Educational or tutorial content\n"
-                    "• At least 5 minutes of substantial content\n"
-                    "• Public accessibility (not private/restricted)"
-                )
-            
-            print(f"[Orchestrator] ✅ Processing {len(transcript)} chars of content")
-            print(f"[Orchestrator] Running {len(self.workers)} workers...")
-            
-            # Process with workers
-            tasks = []
-            for worker in self.workers:
-                task = asyncio.wait_for(
-                    worker.generate(transcript), 
-                    timeout=120  # 2 minutes per worker
-                )
-                tasks.append(task)
-            
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Process results
-            sections = {}
-            successful_workers = 0
-            failed_workers = []
-            
-            for worker, result in zip(self.workers, results):
-                worker_name = getattr(worker, 'name', worker.__class__.__name__.lower().replace('worker', ''))
+            try:
+                # Call worker with timeout
+                print(f"[Orchestrator] Calling {worker_name}.generate()...")
+                start_time = time.time()
                 
-                if isinstance(result, Exception):
-                    print(f"[Orchestrator] ⚠️ Worker {worker_name} failed: {result}")
-                    failed_workers.append(worker_name)
-                    sections[worker_name] = f"<!-- {worker_name} analysis failed -->"
-                else:
-                    if result and len(result.strip()) > 50:
+                result = await asyncio.wait_for(
+                    worker.generate(transcript), 
+                    timeout=180  # 3 minutes per worker
+                )
+                
+                end_time = time.time()
+                processing_time = end_time - start_time
+                
+                # Validate worker result
+                if result and len(result.strip()) > 50:
+                    # Check if it's not just fallback content
+                    if "As an ML researcher, let me break down what we discovered" not in result:
                         sections[worker_name] = result.strip()
                         successful_workers += 1
-                        print(f"[Orchestrator] ✅ {worker_name}: {len(result)} chars")
+                        print(f"[Orchestrator] ✅ {worker_name} SUCCESS: {len(result)} chars in {processing_time:.1f}s")
+                        print(f"[Orchestrator] Preview: {result[:100]}...")
                     else:
-                        print(f"[Orchestrator] ⚠️ {worker_name}: empty result")
                         failed_workers.append(worker_name)
-                        sections[worker_name] = f"<!-- {worker_name} returned empty content -->"
-            
-            # Require at least some workers to succeed
-            if successful_workers < len(self.workers) // 2:
-                raise RuntimeError(
-                    f"Too many analysis workers failed ({len(failed_workers)}/{len(self.workers)}). "
-                    f"Failed workers: {', '.join(failed_workers)}. "
-                    f"This may indicate an issue with the OpenAI API or video content complexity."
-                )
-            
-            # Assemble blog content
-            blog_content = self._assemble_blog(sections)
-            
-            if len(blog_content.strip()) < 500:
-                raise RuntimeError("Generated analysis is too short - indicates worker failures")
-            
-            # Prepare final result
-            stats = {
-                "transcript_length": len(transcript),
-                "blog_length": len(blog_content),
-                "word_count": len(blog_content.split()),
-                "successful_workers": successful_workers,
-                "failed_workers": failed_workers,
-                "success_rate": f"{successful_workers}/{len(self.workers)}",
-                "emergency_mode": False
-            }
-            
-            print(f"[Orchestrator] ✅ Blog generated! {stats['word_count']} words")
-            
-            return {
-                "content": blog_content,
-                "transcript": transcript,
-                "sections": sections,
-                "metadata": self._extract_metadata(sections),
-                "stats": stats
-            }
-            
-        except Exception as e:
-            print(f"[Orchestrator] ❌ Error: {str(e)}")
-            raise e
+                        worker_errors[worker_name] = "Returned fallback content"
+                        print(f"[Orchestrator] ❌ {worker_name} returned fallback content")
+                else:
+                    failed_workers.append(worker_name)
+                    worker_errors[worker_name] = "Empty or too short result"
+                    print(f"[Orchestrator] ❌ {worker_name} returned empty/short result")
+                    
+            except asyncio.TimeoutError:
+                failed_workers.append(worker_name)
+                worker_errors[worker_name] = "Timeout after 3 minutes"
+                print(f"[Orchestrator] ❌ {worker_name} TIMEOUT")
+                
+            except Exception as e:
+                failed_workers.append(worker_name)
+                worker_errors[worker_name] = str(e)
+                print(f"[Orchestrator] ❌ {worker_name} EXCEPTION: {e}")
+                print(f"[Orchestrator] Traceback: {traceback.format_exc()}")
+        
+        # Step 4: Analyze results
+        print(f"\n[Orchestrator] Step 4: Analyzing results...")
+        print(f"[Orchestrator] Successful workers: {successful_workers}/{len(self.workers)}")
+        print(f"[Orchestrator] Failed workers: {failed_workers}")
+        
+        if successful_workers == 0:
+            error_details = "\n".join([f"• {name}: {error}" for name, error in worker_errors.items()])
+            error_msg = (
+                f"❌ All {len(self.workers)} workers failed to generate content.\n\n"
+                f"Detailed errors:\n{error_details}\n\n"
+                f"This usually indicates:\n"
+                f"• OpenAI API key issues\n"
+                f"• Network connectivity problems\n"
+                f"• API rate limiting or billing issues"
+            )
+            print(f"[Orchestrator] {error_msg}")
+            raise RuntimeError(error_msg)
+        
+        if successful_workers < len(self.workers) // 2:
+            print(f"[Orchestrator] ⚠️ Warning: Only {successful_workers}/{len(self.workers)} workers succeeded")
+        
+        # Step 5: Assemble blog
+        print(f"[Orchestrator] Step 5: Assembling blog...")
+        blog_content = self._assemble_blog(sections)
+        
+        if len(blog_content.strip()) < 500:
+            raise RuntimeError("Generated blog content is too short - indicates systematic failure")
+        
+        # Success!
+        stats = {
+            "transcript_length": len(transcript),
+            "blog_length": len(blog_content),
+            "word_count": len(blog_content.split()),
+            "successful_workers": successful_workers,
+            "failed_workers": failed_workers,
+            "worker_errors": worker_errors,
+            "success_rate": f"{successful_workers}/{len(self.workers)}"
+        }
+        
+        print(f"[Orchestrator] ✅ Blog generation COMPLETE!")
+        print(f"[Orchestrator] Final stats: {stats['word_count']} words, {stats['success_rate']} workers succeeded")
+        
+        return {
+            "content": blog_content,
+            "transcript": transcript,
+            "sections": sections,
+            "metadata": {},
+            "stats": stats
+        }
     
     def _assemble_blog(self, sections: Dict[str, str]) -> str:
-        """Assemble sections into final blog content."""
+        """Assemble blog content with quality filtering."""
         section_order = [
             "title", "intro", "key_points", 
             "quotes", "summary", "conclusion", "tags"
@@ -184,37 +218,18 @@ class BlogOrchestrator:
             if section_name in sections:
                 content = sections[section_name].strip()
                 
-                # Only include non-empty, real content
+                # Only include real content (not fallback or error messages)
                 if (content and 
-                    not content.startswith("<!--") and
                     len(content) > 20 and
-                    'failed' not in content.lower()):
+                    not content.startswith("<!--") and
+                    "As an ML researcher, let me break down" not in content):
                     blog_parts.append(content)
+                    print(f"[Orchestrator] Including {section_name}: {len(content)} chars")
+                else:
+                    print(f"[Orchestrator] Skipping {section_name}: invalid content")
         
         if not blog_parts:
-            raise RuntimeError("No valid content sections generated")
+            return "No valid content sections were generated."
         
         return "\n\n".join(blog_parts)
-    
-    def _extract_metadata(self, sections: Dict[str, str]) -> Dict[str, str]:
-        """Extract metadata from worker outputs."""
-        metadata = {}
-        
-        try:
-            if "seo" in sections and sections["seo"]:
-                seo_content = sections["seo"]
-                for line in seo_content.split('\n'):
-                    if line.startswith('META_DESCRIPTION:'):
-                        metadata['description'] = line.split(':', 1)[1].strip().strip('"')
-                    elif line.startswith('KEYWORDS:'):
-                        metadata['keywords'] = line.split(':', 1)[1].strip().strip('"')
-        except Exception:
-            pass
-        
-        # Ensure we have defaults
-        if 'description' not in metadata:
-            metadata['description'] = "Video content analysis and insights"
-        if 'keywords' not in metadata:
-            metadata['keywords'] = "video, content, analysis, insights"
-        
-        return metadata
+
