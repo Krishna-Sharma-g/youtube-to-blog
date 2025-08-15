@@ -49,42 +49,67 @@ TECHNICAL APPROACH:
 - Make advanced topics accessible to different experience levels
 - Every sentence should serve the reader, not sound impressive"""
 
+    print(f"[DEBUG PROMPT] Adding ML researcher instruction to {len(messages)} messages")
+    
     # Add ML researcher instruction to existing system message or create new one
     if messages and messages[0]["role"] == "system":
         messages["content"] = ml_researcher_instruction + "\n\n" + messages["content"]
+        print(f"[DEBUG PROMPT] Combined with existing system message")
     else:
         messages.insert(0, {"role": "system", "content": ml_researcher_instruction})
+        print(f"[DEBUG PROMPT] Added new system message")
     
+    print(f"[DEBUG PROMPT] Final prompt has {len(messages)} messages")
     return messages
 
 class BaseWorker:
-    """Enhanced base worker with unified ML researcher persona."""
+    """Enhanced base worker with unified ML researcher persona and comprehensive debugging."""
     
     def __init__(self, name: str):
         self.name = name
+        print(f"[DEBUG WORKER] Initialized {name} worker")
     
     def get_openai_api_key(self):
-        """Get OpenAI API key with proper error handling."""
+        """Get OpenAI API key with proper error handling and debugging."""
+        print(f"[DEBUG {self.name}] Getting OpenAI API key...")
+        
         try:
             api_key = st.secrets["OPENAI_API_KEY"]
             if api_key and api_key.startswith("sk-"):
+                print(f"[DEBUG {self.name}] ✅ API key found in Streamlit secrets: {api_key[:10]}...")
                 return api_key
-        except:
-            pass
+            else:
+                print(f"[DEBUG {self.name}] ❌ Invalid API key format in Streamlit secrets")
+        except Exception as e:
+            print(f"[DEBUG {self.name}] ❌ Streamlit secrets error: {e}")
         
         api_key = os.getenv("OPENAI_API_KEY")
         if api_key and api_key.startswith("sk-"):
+            print(f"[DEBUG {self.name}] ✅ API key found in environment: {api_key[:10]}...")
             return api_key
+        else:
+            print(f"[DEBUG {self.name}] ❌ No valid API key in environment")
         
-        raise ValueError("OpenAI API key not found or invalid")
+        error_msg = "OpenAI API key not found or invalid"
+        print(f"[DEBUG {self.name}] ❌ {error_msg}")
+        raise ValueError(error_msg)
     
     def _call_openai_as_ml_researcher(self, messages: List[Dict], max_tokens: int = 2000) -> str:
-        """ML researcher OpenAI call with unified persona."""
+        """ML researcher OpenAI call with unified persona and comprehensive debugging."""
+        print(f"[DEBUG {self.name}] Starting OpenAI API call...")
+        print(f"[DEBUG {self.name}] Input messages: {len(messages)}, max_tokens: {max_tokens}")
+        
         try:
+            # Get API key with debugging
             api_key = self.get_openai_api_key()
             
-            # Apply ML researcher persona to all prompts
+            # Apply ML researcher persona to all prompts with debugging
+            print(f"[DEBUG {self.name}] Applying ML researcher prompt...")
             ml_messages = build_ml_researcher_prompt(messages)
+            
+            # Log prompt details
+            total_chars = sum(len(msg.get('content', '')) for msg in ml_messages)
+            print(f"[DEBUG {self.name}] Final prompt: {len(ml_messages)} messages, {total_chars} characters")
             
             headers = {
                 "Authorization": f"Bearer {api_key}",
@@ -92,13 +117,16 @@ class BaseWorker:
             }
             
             data = {
-                "model": "gpt-4o",
+                "model": "gpt-3.5-turbo",  # Using stable model
                 "messages": ml_messages,
                 "max_tokens": max_tokens,
-                "temperature": 0.8,  # Balanced for technical accuracy and natural flow
-                "presence_penalty": 0.2,  # Encourage unique insights
-                "frequency_penalty": 0.2   # Avoid repetitive academic language
+                "temperature": 0.8,
+                "presence_penalty": 0.2,
+                "frequency_penalty": 0.2
             }
+            
+            print(f"[DEBUG {self.name}] Making HTTP request to OpenAI...")
+            print(f"[DEBUG {self.name}] Using model: {data['model']}")
             
             response = requests.post(
                 "https://api.openai.com/v1/chat/completions",
@@ -107,39 +135,61 @@ class BaseWorker:
                 timeout=120
             )
             
+            print(f"[DEBUG {self.name}] Response status: {response.status_code}")
+            
             if response.status_code == 200:
                 result = response.json()
                 content = result["choices"][0]["message"]["content"]
+                print(f"[DEBUG {self.name}] ✅ API Success! Generated {len(content)} characters")
+                print(f"[DEBUG {self.name}] Content preview: {content[:100]}...")
                 return content.strip()
             else:
-                raise Exception(f"OpenAI API Error {response.status_code}: {response.text}")
+                error_details = response.text
+                print(f"[DEBUG {self.name}] ❌ API Error {response.status_code}")
+                print(f"[DEBUG {self.name}] Error details: {error_details}")
+                raise Exception(f"OpenAI API Error {response.status_code}: {error_details}")
                 
         except Exception as e:
-            print(f"[{self.name}] ML researcher call failed: {e}")
+            print(f"[DEBUG {self.name}] ❌ Exception in _call_openai_as_ml_researcher: {str(e)}")
+            print(f"[DEBUG {self.name}] Exception type: {type(e).__name__}")
             raise e
     
     async def generate(self, transcript: str) -> str:
-        """Generate ML researcher content with chunking and detailed analysis."""
+        """Generate ML researcher content with chunking, detailed analysis, and debugging."""
+        print(f"[DEBUG {self.name}] Starting generate() method")
+        print(f"[DEBUG {self.name}] Received transcript length: {len(transcript) if transcript else 0}")
+        
         try:
             if not transcript or len(transcript) < 100:
+                print(f"[DEBUG {self.name}] ❌ Transcript too short or empty, using fallback")
                 return self._get_fallback_content()
             
+            print(f"[DEBUG {self.name}] Chunking transcript...")
             chunks = chunk_text(transcript, max_words=1000)
+            print(f"[DEBUG {self.name}] Created {len(chunks)} chunks")
             
+            print(f"[DEBUG {self.name}] Running _generate_ml_content in thread...")
             import asyncio
-            return await asyncio.to_thread(self._generate_ml_content, chunks)
+            result = await asyncio.to_thread(self._generate_ml_content, chunks)
+            
+            print(f"[DEBUG {self.name}] ✅ generate() completed successfully")
+            return result
             
         except Exception as e:
-            print(f"[{self.name}] Generation failed: {e}")
+            print(f"[DEBUG {self.name}] ❌ Exception in generate(): {str(e)}")
+            print(f"[DEBUG {self.name}] Using fallback content due to error")
             return self._get_fallback_content()
     
     def _generate_ml_content(self, chunks: List[str]) -> str:
         """Override in subclasses for ML researcher content generation."""
+        print(f"[DEBUG {self.name}] Base _generate_ml_content called - this should be overridden!")
         raise NotImplementedError
     
     def _get_fallback_content(self) -> str:
-        """ML researcher fallback content."""
-        return f"## {self.name.title()}\n\nAs an ML researcher, let me break down what we discovered in this section..."
+        """ML researcher fallback content with debugging."""
+        fallback = f"## {self.name.title()}\n\nAs an ML researcher, let me break down what we discovered in this section..."
+        print(f"[DEBUG {self.name}] Returning fallback content: {len(fallback)} characters")
+        return fallback
 
 class TitleWorker(BaseWorker):
     """Generate compelling titles from an ML researcher perspective."""
@@ -148,7 +198,11 @@ class TitleWorker(BaseWorker):
         super().__init__("title")
     
     def _generate_ml_content(self, chunks: List[str]) -> str:
+        print(f"[DEBUG {self.name}] Starting _generate_ml_content")
+        print(f"[DEBUG {self.name}] Processing {len(chunks)} chunks")
+        
         primary_content = chunks[0] if chunks else ""
+        print(f"[DEBUG {self.name}] Primary content length: {len(primary_content)}")
         
         messages = [
             {
@@ -179,12 +233,21 @@ Write ONLY the title with a # markdown header."""
             }
         ]
         
-        result = self._call_openai_as_ml_researcher(messages, max_tokens=150)
+        print(f"[DEBUG {self.name}] Built {len(messages)} messages for OpenAI")
         
-        if not result.startswith('#'):
-            result = f"# {result}"
-        
-        return result
+        try:
+            result = self._call_openai_as_ml_researcher(messages, max_tokens=150)
+            
+            if not result.startswith('#'):
+                result = f"# {result}"
+                print(f"[DEBUG {self.name}] Added # header to result")
+            
+            print(f"[DEBUG {self.name}] ✅ Title generation successful")
+            return result
+            
+        except Exception as e:
+            print(f"[DEBUG {self.name}] ❌ Title generation failed: {e}")
+            raise e
 
 class IntroWorker(BaseWorker):
     """Generate engaging introductions from ML researcher perspective."""
@@ -193,7 +256,11 @@ class IntroWorker(BaseWorker):
         super().__init__("intro")
     
     def _generate_ml_content(self, chunks: List[str]) -> str:
+        print(f"[DEBUG {self.name}] Starting _generate_ml_content")
+        print(f"[DEBUG {self.name}] Processing {len(chunks)} chunks")
+        
         intro_content = ' '.join(chunks[:2]) if len(chunks) >= 2 else chunks[0] if chunks else ""
+        print(f"[DEBUG {self.name}] Intro content length: {len(intro_content)}")
         
         messages = [
             {
@@ -224,7 +291,16 @@ Make it engaging and technically credible, appealing to ML enthusiasts of all le
             }
         ]
         
-        return self._call_openai_as_ml_researcher(messages, max_tokens=400)
+        print(f"[DEBUG {self.name}] Built {len(messages)} messages for OpenAI")
+        
+        try:
+            result = self._call_openai_as_ml_researcher(messages, max_tokens=400)
+            print(f"[DEBUG {self.name}] ✅ Intro generation successful")
+            return result
+            
+        except Exception as e:
+            print(f"[DEBUG {self.name}] ❌ Intro generation failed: {e}")
+            raise e
 
 class KeyPointsWorker(BaseWorker):
     """Extract key ML insights with researcher-level analysis."""
@@ -233,7 +309,11 @@ class KeyPointsWorker(BaseWorker):
         super().__init__("key_points")
     
     def _generate_ml_content(self, chunks: List[str]) -> str:
+        print(f"[DEBUG {self.name}] Starting _generate_ml_content")
+        print(f"[DEBUG {self.name}] Processing {len(chunks)} chunks")
+        
         full_content = ' '.join(chunks)
+        print(f"[DEBUG {self.name}] Full content length: {len(full_content)}")
         
         messages = [
             {
@@ -271,7 +351,16 @@ Make each point technically solid with clear explanations for different experien
             }
         ]
         
-        return self._call_openai_as_ml_researcher(messages, max_tokens=1500)
+        print(f"[DEBUG {self.name}] Built {len(messages)} messages for OpenAI")
+        
+        try:
+            result = self._call_openai_as_ml_researcher(messages, max_tokens=1500)
+            print(f"[DEBUG {self.name}] ✅ Key points generation successful")
+            return result
+            
+        except Exception as e:
+            print(f"[DEBUG {self.name}] ❌ Key points generation failed: {e}")
+            raise e
 
 class QuotesWorker(BaseWorker):
     """Extract meaningful quotes with ML researcher commentary."""
@@ -280,7 +369,11 @@ class QuotesWorker(BaseWorker):
         super().__init__("quotes")
     
     def _generate_ml_content(self, chunks: List[str]) -> str:
+        print(f"[DEBUG {self.name}] Starting _generate_ml_content")
+        print(f"[DEBUG {self.name}] Processing {len(chunks)} chunks")
+        
         full_content = ' '.join(chunks)
+        print(f"[DEBUG {self.name}] Full content length: {len(full_content)}")
         
         messages = [
             {
@@ -320,7 +413,16 @@ Pick 2-3 powerful quotes and give research-informed commentary on each."""
             }
         ]
         
-        return self._call_openai_as_ml_researcher(messages, max_tokens=800)
+        print(f"[DEBUG {self.name}] Built {len(messages)} messages for OpenAI")
+        
+        try:
+            result = self._call_openai_as_ml_researcher(messages, max_tokens=800)
+            print(f"[DEBUG {self.name}] ✅ Quotes generation successful")
+            return result
+            
+        except Exception as e:
+            print(f"[DEBUG {self.name}] ❌ Quotes generation failed: {e}")
+            raise e
 
 class SummaryWorker(BaseWorker):
     """Generate comprehensive summaries from ML researcher viewpoint."""
@@ -329,7 +431,11 @@ class SummaryWorker(BaseWorker):
         super().__init__("summary")
     
     def _generate_ml_content(self, chunks: List[str]) -> str:
+        print(f"[DEBUG {self.name}] Starting _generate_ml_content")
+        print(f"[DEBUG {self.name}] Processing {len(chunks)} chunks")
+        
         full_content = ' '.join(chunks)
+        print(f"[DEBUG {self.name}] Full content length: {len(full_content)}")
         
         messages = [
             {
@@ -360,12 +466,21 @@ Make it natural and technically grounded, appealing to ML enthusiasts of all lev
             }
         ]
         
-        result = self._call_openai_as_ml_researcher(messages, max_tokens=600)
+        print(f"[DEBUG {self.name}] Built {len(messages)} messages for OpenAI")
         
-        if not result.startswith("##"):
-            result = f"## Research Summary\n\n{result}"
-        
-        return result
+        try:
+            result = self._call_openai_as_ml_researcher(messages, max_tokens=600)
+            
+            if not result.startswith("##"):
+                result = f"## Research Summary\n\n{result}"
+                print(f"[DEBUG {self.name}] Added header to summary")
+            
+            print(f"[DEBUG {self.name}] ✅ Summary generation successful")
+            return result
+            
+        except Exception as e:
+            print(f"[DEBUG {self.name}] ❌ Summary generation failed: {e}")
+            raise e
 
 class ConclusionWorker(BaseWorker):
     """Generate actionable conclusions from ML researcher perspective."""
@@ -374,7 +489,11 @@ class ConclusionWorker(BaseWorker):
         super().__init__("conclusion")
     
     def _generate_ml_content(self, chunks: List[str]) -> str:
+        print(f"[DEBUG {self.name}] Starting _generate_ml_content")
+        print(f"[DEBUG {self.name}] Processing {len(chunks)} chunks")
+        
         conclusion_content = ' '.join(chunks[-2:]) if len(chunks) >= 2 else chunks[-1] if chunks else ""
+        print(f"[DEBUG {self.name}] Conclusion content length: {len(conclusion_content)}")
         
         messages = [
             {
@@ -405,12 +524,21 @@ Make it feel like genuine research guidance from a colleague, not generic motiva
             }
         ]
         
-        result = self._call_openai_as_ml_researcher(messages, max_tokens=400)
+        print(f"[DEBUG {self.name}] Built {len(messages)} messages for OpenAI")
         
-        if not result.startswith("##"):
-            result = f"## Research Directions\n\n{result}"
-        
-        return result
+        try:
+            result = self._call_openai_as_ml_researcher(messages, max_tokens=400)
+            
+            if not result.startswith("##"):
+                result = f"## Research Directions\n\n{result}"
+                print(f"[DEBUG {self.name}] Added header to conclusion")
+            
+            print(f"[DEBUG {self.name}] ✅ Conclusion generation successful")
+            return result
+            
+        except Exception as e:
+            print(f"[DEBUG {self.name}] ❌ Conclusion generation failed: {e}")
+            raise e
 
 class SEOWorker(BaseWorker):
     """Generate ML-focused SEO metadata."""
@@ -419,7 +547,11 @@ class SEOWorker(BaseWorker):
         super().__init__("seo")
     
     def _generate_ml_content(self, chunks: List[str]) -> str:
+        print(f"[DEBUG {self.name}] Starting _generate_ml_content")
+        print(f"[DEBUG {self.name}] Processing {len(chunks)} chunks")
+        
         full_content = ' '.join(chunks)
+        print(f"[DEBUG {self.name}] Full content length: {len(full_content)}")
         
         messages = [
             {
@@ -453,7 +585,16 @@ Write for ML practitioners searching for technical insights and learning resourc
             }
         ]
         
-        return self._call_openai_as_ml_researcher(messages, max_tokens=200)
+        print(f"[DEBUG {self.name}] Built {len(messages)} messages for OpenAI")
+        
+        try:
+            result = self._call_openai_as_ml_researcher(messages, max_tokens=200)
+            print(f"[DEBUG {self.name}] ✅ SEO generation successful")
+            return result
+            
+        except Exception as e:
+            print(f"[DEBUG {self.name}] ❌ SEO generation failed: {e}")
+            raise e
 
 class TagsWorker(BaseWorker):
     """Generate ML-relevant, searchable tags."""
@@ -462,7 +603,11 @@ class TagsWorker(BaseWorker):
         super().__init__("tags")
     
     def _generate_ml_content(self, chunks: List[str]) -> str:
+        print(f"[DEBUG {self.name}] Starting _generate_ml_content")
+        print(f"[DEBUG {self.name}] Processing {len(chunks)} chunks")
+        
         content_sample = ' '.join(chunks)[:1500]
+        print(f"[DEBUG {self.name}] Content sample length: {len(content_sample)}")
         
         messages = [
             {
@@ -487,7 +632,18 @@ Pick tags that ML enthusiasts and researchers would actually search for."""
             }
         ]
         
-        return self._call_openai_as_ml_researcher(messages, max_tokens=100)
+        print(f"[DEBUG {self.name}] Built {len(messages)} messages for OpenAI")
+        
+        try:
+            result = self._call_openai_as_ml_researcher(messages, max_tokens=100)
+            print(f"[DEBUG {self.name}] ✅ Tags generation successful")
+            return result
+            
+        except Exception as e:
+            print(f"[DEBUG {self.name}] ❌ Tags generation failed: {e}")
+            raise e
     
     def _get_fallback_content(self) -> str:
-        return "Tags: #MachineLearning #MLResearch #DataScience #AI #DeepLearning #MLEngineering #AIResearch #TechInsights #MLCommunity #DataScientist"
+        fallback = "Tags: #MachineLearning #MLResearch #DataScience #AI #DeepLearning #MLEngineering #AIResearch #TechInsights #MLCommunity #DataScientist"
+        print(f"[DEBUG {self.name}] Using fallback tags")
+        return fallback
